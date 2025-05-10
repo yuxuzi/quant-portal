@@ -1,0 +1,74 @@
+# prevent the local config file from being uploaded to the remote repository
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.uv/
+.uv-cache/
+
+# Flask stuff
+instance/
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+.env.*
+
+# Pytest
+.cache/
+.pytest_cache/
+
+# Coverage reports
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+.tox/
+
+# mypy, pylint, Ruff, Black, etc.
+.mypy_cache/
+.dmypy.json
+ruff_cache/
+.pyre/
+.pytype/
+.idea/
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Node (if any frontend)
+node_modules/
+npm-debug.log*
+
+# Lockfiles
+poetry.lock
+Pipfile.lock
+uv.lock

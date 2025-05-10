@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>About the Integrated Dashboard</h1>
+    <div class="row">
+        <div class="col-md-8">
+            <p class="lead">
+                This application demonstrates the integration of multiple dashboard frameworks within a single Flask application.
+            </p>
+            <h3>Features</h3>
+            <ul>
+                <li>Flask as the main web framework</li>
+                <li>Plotly Dash for interactive data visualizations</li>
+                <li>Taipy for building data-driven web applications</li>
+                <li>Unified navigation system with Jinja templates</li>
+                <li>Responsive design using Bootstrap</li>
+                <li>Kerberos authentication for secure access</li>
+            </ul>
+            <h3>Technical Details</h3>
+            <p>
+                The application uses Flask as the primary web framework. Dash and Taipy are mounted within the Flask 
+                application, allowing seamless navigation between different dashboard tools while maintaining a consistent 
+                user interface and experience. Windows Kerberos authentication ensures secure access to all application resources.
+            </p>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h5 class="card-title">Dashboard Frameworks</h5>
+                    <p>This application integrates:</p>
+                    <ul>
+                        <li><strong>Flask</strong>: Web framework</li>
+                        <li><strong>Dash</strong>: Interactive visualizations</li>
+                        <li><strong>Taipy</strong>: Data-driven applications</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

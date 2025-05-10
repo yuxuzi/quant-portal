@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="jumbotron">
+        <h1 class="display-4">Welcome to Integrated Dashboard</h1>
+        <p class="lead">This application integrates multiple dashboard frameworks in a single Flask application.</p>
+        <hr class="my-4">
+        <p>Use the navigation bar above to access different dashboard applications:</p>
+        <div class="row mt-4">
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Dash Dashboard</h5>
+                        <p class="card-text">Interactive visualizations powered by Plotly Dash.</p>
+                        <a href="{{ url_for('dash_dashboard') }}" class="btn btn-primary">Go to Dash</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Taipy Dashboard</h5>
+                        <p class="card-text">Data-driven web applications with Taipy GUI.</p>
+                        <a href="{{ url_for('taipy_dashboard') }}" class="btn btn-success">Go to Taipy</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

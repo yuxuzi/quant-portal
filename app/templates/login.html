@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">Fidelity Quant Portal Login</h4>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-4">
+                        <button onclick="window.location.href='/login/kerberos'" 
+                                class="btn btn-lg btn-secondary">
+                            <i class="fas fa-windows"></i> Windows SSO Login
+                        </button>
+                    </div>
+                    
+                    <hr>
+                    
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <input type="text" name="username" 
+                                   class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <input type="password" name="password" 
+                                   class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="mt-3 text-center">
+                <small class="text-muted">
+                    For access requests, contact Quant Team IT Support
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
