@@ -192,6 +192,131 @@ def call_function(cutoff_date, name_list):
     df.drop(columns=['RESULT_ROW'], inplace=True)
     return df
 
+    ```# dashboards/taipy_app.py
+from taipy.gui import Gui
+from flask import after_this_request
+
+df = ...  # your data
+page = "<|{df}|table|>"
+
+gui = Gui(page)
+
+# Hook into Flask app before running
+flask_app = gui._server._flask
+
+@flask_app.after_request
+def remove_frame_options(response):
+    # Option 1: Remove header
+    response.headers.pop("X-Frame-Options", None)
+
+    # Option 2: Or allow embedding from same origin
+    # response.headers["X-Frame-Options"] = "SAMEORIGIN"
+
+    return response
+
+gui.run()
+Perfect — if your Taipy dashboard is same-origin (e.g., served at http://localhost:5000 and your FastAPI+Jinja2 app is http://localhost:8000), then you control both and can allow embedding in an <iframe> easily.
+
+⸻
+
+✅ Goal
+
+You want to embed Taipy in a Jinja2 page like this:
+
+<iframe src="http://localhost:5000" style="width:100%; height:90vh;"></iframe>
+
+
+⸻
+
+❌ Problem (by default):
+
+Taipy uses Flask under the hood and likely sends this header:
+
+X-Frame-Options: DENY
+
+Which blocks iframe embedding.
+
+⸻
+
+✅ Solution: Remove or modify X-Frame-Options from Taipy’s Flask app
+
+🔧 1. Get the underlying Flask app
+
+If you’re running Taipy via:
+
+Gui(page).run()
+
+Then you can access the underlying Flask app and modify its response headers before it starts.
+
+⸻
+
+✅ 2. Set X-Frame-Options: SAMEORIGIN or remove it
+
+Here’s a full working example:
+
+# dashboards/taipy_app.py
+from taipy.gui import Gui
+from flask import after_this_request
+
+df = ...  # your data
+page = "<|{df}|table|>"
+
+gui = Gui(page)
+
+# Hook into Flask app before running
+flask_app = gui._server._flask
+
+@flask_app.after_request
+def remove_frame_options(response):
+    # Option 1: Remove header
+    response.headers.pop("X-Frame-Options", None)
+
+    # Option 2: Or allow embedding from same origin
+    # response.headers["X-Frame-Options"] = "SAMEORIGIN"
+
+    return response
+
+gui.run()
+<iframe src="http://localhost:5000" style="width:100%; height:90vh;"></iframe>
+
+```
+
+⸻
+
+✅ Now, embed it in your FastAPI page:
+
+index.html
+
+<iframe src="http://localhost:5000" style="width:100%; height:90vh; border:none;"></iframe>
+
+
+⸻
+
+🔐 Optional: Set Content-Security-Policy
+
+If you’re using strict security headers in your main FastAPI app, ensure:
+
+Content-Security-Policy: frame-ancestors 'self' http://localhost:8000 http://localhost:5000;
+
+
+⸻
+
+✅ Summary
+
+Task	How to Solve
+Allow same-origin iframe embedding	Remove or relax X-Frame-Options in Flask
+Embed Taipy into FastAPI Jinja2	Use <iframe src="..."> in a template
+
+
+⸻
+
+Would you like to:
+	•	Serve both apps (FastAPI + Taipy) under the same port and prefix (e.g. /taipy)?
+	•	Bundle them into one uvicorn process with mount()?
+
+Let me know how tightly integrated you want this.
+
+
 # ----------------------
 # Example usage
 # ----------------------
