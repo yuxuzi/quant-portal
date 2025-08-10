@@ -1,99 +1,109 @@
 """
 Excel Report Library - Structured library for creating Excel reports with native formatting,
-DataFrames, and embedded plotly charts.
+DataFrames, and embedded Plotly charts.
 Optimized for quantitative finance teams using openpyxl and plotly/kaleido stack.
+
+Version: 1.0.0
 """
 
-import uuid
-import io
 import os
-from typing import List, Dict, Any, Optional, Union, Callable, Tuple
+import tempfile
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-import pandas as pd
+from typing import Any, Callable, Dict, List, Optional, Self, Tuple
+
 import numpy as np
+import pandas as pd
+from pydantic import BaseModel, Field, model_validator
 
 try:
     import openpyxl
     from openpyxl import Workbook
-    from openpyxl.styles import Font, Fill, Border, Side, Alignment, NamedStyle, PatternFill
-    from openpyxl.formatting.rule import ColorScaleRule, DataBarRule, IconSetRule, CellIsRule
-    from openpyxl.chart import LineChart, BarChart, ScatterChart, PieChart
     from openpyxl.drawing.image import Image
-    from openpyxl.utils.dataframe import dataframe_to_rows
+    from openpyxl.formatting.rule import CellIsRule, ColorScaleRule, DataBarRule
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
 
 try:
-    import plotly.graph_objects as go
     import plotly.express as px
-    import plotly.io as pio
+    import plotly.graph_objects as go
     HAS_PLOTLY = True
 except ImportError:
     HAS_PLOTLY = False
 
 
-@dataclass
-class ExcelStyle:
-    """Excel cell styling configuration."""
+class ExcelStyle(BaseModel):
+    """Excel cell styling configuration for quantitative reporting."""
     font_name: str = "Calibri"
     font_size: int = 11
     font_bold: bool = False
     font_color: str = "000000"  # Black
-    fill_color: Optional[str] = None  # Hex color without #
+    fill_color: str | None = None  # Hex color without #
     border_style: str = "thin"  # thin, medium, thick
     border_color: str = "000000"
     alignment_horizontal: str = "general"  # left, center, right, general
     alignment_vertical: str = "bottom"  # top, center, bottom
     number_format: str = "General"
 
+    model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
 
-@dataclass
-class TableStyle:
-    """Predefined table styling configurations."""
-    header: ExcelStyle = field(default_factory=lambda: ExcelStyle(
+
+class TableStyle(BaseModel):
+    """Predefined table styling configurations optimized for quant finance reports."""
+    header: ExcelStyle = Field(default_factory=lambda: ExcelStyle(
         font_bold=True, fill_color="D9E1F2", alignment_horizontal="center"
     ))
-    data: ExcelStyle = field(default_factory=lambda: ExcelStyle())
-    alternating_row: ExcelStyle = field(default_factory=lambda: ExcelStyle(fill_color="F2F2F2"))
-    
+    data: ExcelStyle = Field(default_factory=lambda: ExcelStyle())
+    alternating_row: ExcelStyle = Field(default_factory=lambda: ExcelStyle(fill_color="F2F2F2"))
+
+    model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
+
     @classmethod
-    def financial_table(cls):
-        """Financial/trading table style."""
+    def financial_table(cls) -> Self:
+        """Financial/trading table style with professional blue theme."""
         return cls(
             header=ExcelStyle(font_bold=True, fill_color="4472C4", font_color="FFFFFF", 
-                            alignment_horizontal="center"),
-            data=ExcelStyle(alignment_horizontal="right"),
+                              alignment_horizontal="center"),
+            data=ExcelStyle(alignment_horizontal="right", number_format="#,##0.00"),
             alternating_row=ExcelStyle(fill_color="F8F9FA")
         )
     
     @classmethod
-    def risk_table(cls):
-        """Risk metrics table style."""
+    def risk_table(cls) -> Self:
+        """Risk metrics table style with alert red theme."""
         return cls(
             header=ExcelStyle(font_bold=True, fill_color="E74C3C", font_color="FFFFFF",
-                            alignment_horizontal="center"),
-            data=ExcelStyle(alignment_horizontal="center"),
+                              alignment_horizontal="center"),
+            data=ExcelStyle(alignment_horizontal="center", number_format="0.00%"),
             alternating_row=ExcelStyle(fill_color="FADBD8")
         )
     
     @classmethod
-    def pnl_table(cls):
-        """P&L table style with green/red formatting."""
+    def pnl_table(cls) -> Self:
+        """P&L table style with green profit theme."""
         return cls(
             header=ExcelStyle(font_bold=True, fill_color="28A745", font_color="FFFFFF",
-                            alignment_horizontal="center"),
-            data=ExcelStyle(alignment_horizontal="right"),
+                              alignment_horizontal="center"),
+            data=ExcelStyle(alignment_horizontal="right", number_format='"$"#,##0.00;[Red]("$"#,##0.00)'),
             alternating_row=ExcelStyle(fill_color="E8F5E8")
         )
+
+    @model_validator(mode='after')
+    def validate_styles(self) -> Self:
+        """Validate style configurations."""
+        if self.header.font_size < 8 or self.header.font_size > 72:
+            raise ValueError("Header font size must be between 8 and 72")
+        return self
 
 
 class ExcelComponent:
     """Base class for Excel report components."""
     
-    def __init__(self, title: str = None, start_row: int = 1, start_col: int = 1):
+    def __init__(self, title: str | None = None, start_row: int = 1, start_col: int = 1) -> None:
         """
         Initialize Excel component.
         
@@ -108,11 +118,11 @@ class ExcelComponent:
         self.end_row = start_row
         self.end_col = start_col
         
-    def write_to_worksheet(self, worksheet, current_row: int = None) -> int:
+    def write_to_worksheet(self, worksheet, current_row: int | None = None) -> int:
         """Write component to worksheet and return next available row."""
         raise NotImplementedError("Subclasses must implement write_to_worksheet")
         
-    def _apply_style(self, cell, style: ExcelStyle):
+    def _apply_style(self, cell, style: ExcelStyle) -> None:
         """Apply ExcelStyle to a cell."""
         if not HAS_OPENPYXL:
             return
@@ -146,7 +156,7 @@ class ExcelComponent:
 class TextComponent(ExcelComponent):
     """Component for text content in Excel."""
     
-    def __init__(self, text: str, style: ExcelStyle = None, **kwargs):
+    def __init__(self, text: str, style: ExcelStyle | None = None, **kwargs) -> None:
         """
         Initialize text component.
         
@@ -159,7 +169,7 @@ class TextComponent(ExcelComponent):
         self.text = text
         self.style = style or ExcelStyle(font_size=12)
         
-    def write_to_worksheet(self, worksheet, current_row: int = None) -> int:
+    def write_to_worksheet(self, worksheet, current_row: int | None = None) -> int:
         """Write text to worksheet."""
         row = current_row or self.start_row
         
@@ -179,15 +189,15 @@ class TextComponent(ExcelComponent):
 
 
 class DataFrameComponent(ExcelComponent):
-    """Component for DataFrames with native Excel formatting."""
+    """Component for DataFrames with native Excel formatting, optimized for quant data."""
     
     def __init__(self, df: pd.DataFrame, 
-                 table_style: TableStyle = None,
-                 number_formats: Optional[Dict[str, str]] = None,
-                 conditional_formatting: Optional[Dict[str, Any]] = None,
+                 table_style: TableStyle | None = None,
+                 number_formats: dict[str, str] | None = None,
+                 conditional_formatting: dict[str, dict[str, Any]] | None = None,
                  freeze_header: bool = True,
                  autofit_columns: bool = True,
-                 **kwargs):
+                 **kwargs) -> None:
         """
         Initialize DataFrame component.
         
@@ -208,7 +218,7 @@ class DataFrameComponent(ExcelComponent):
         self.freeze_header = freeze_header
         self.autofit_columns = autofit_columns
         
-    def write_to_worksheet(self, worksheet, current_row: int = None) -> int:
+    def write_to_worksheet(self, worksheet, current_row: int | None = None) -> int:
         """Write DataFrame to worksheet with native Excel formatting."""
         start_row = current_row or self.start_row
         
@@ -223,19 +233,19 @@ class DataFrameComponent(ExcelComponent):
         df_start_row = start_row
         
         # Write headers
-        for col_idx, column in enumerate(self.df.columns):
+        for col_idx, column in enumerate(self.df.columns, start=0):
             cell = worksheet.cell(row=df_start_row, column=self.start_col + col_idx, value=column)
             self._apply_style(cell, self.table_style.header)
             
         # Write data rows
-        for row_idx, row_data in enumerate(self.df.itertuples(index=False)):
+        for row_idx, row_data in enumerate(self.df.itertuples(index=False), start=0):
             excel_row = df_start_row + 1 + row_idx
             
             # Determine if alternating row
-            use_alt_style = row_idx % 2 == 1 and self.table_style.alternating_row.fill_color
+            use_alt_style = row_idx % 2 == 1 and self.table_style.alternating_row.fill_color is not None
             row_style = self.table_style.alternating_row if use_alt_style else self.table_style.data
             
-            for col_idx, value in enumerate(row_data):
+            for col_idx, value in enumerate(row_data, start=0):
                 cell = worksheet.cell(row=excel_row, column=self.start_col + col_idx, value=value)
                 
                 # Apply base style
@@ -260,8 +270,8 @@ class DataFrameComponent(ExcelComponent):
         self.end_row = df_start_row + len(self.df)
         return self.end_row + 3  # Return next available row with spacing
         
-    def _apply_conditional_formatting(self, worksheet, header_row: int):
-        """Apply conditional formatting rules."""
+    def _apply_conditional_formatting(self, worksheet, header_row: int) -> None:
+        """Apply conditional formatting rules for quant metrics."""
         if not self.conditional_formatting:
             return
             
@@ -272,23 +282,23 @@ class DataFrameComponent(ExcelComponent):
             if col_name not in self.df.columns:
                 continue
                 
-            col_idx = list(self.df.columns).index(col_name)
+            col_idx = self.df.columns.get_loc(col_name)
             col_letter = get_column_letter(self.start_col + col_idx)
             cell_range = f"{col_letter}{data_start_row}:{col_letter}{data_end_row}"
             
             rule_type = formatting_rule.get('type')
             
             if rule_type == 'color_scale':
-                # Color scale formatting (red-yellow-green)
+                # Color scale formatting (red-yellow-green) for risk levels
                 rule = ColorScaleRule(
-                    start_type='min', start_color='FF6B6B',  # Red
+                    start_type='min', start_color='FF6B6B',  # Red for high risk
                     mid_type='percentile', mid_value=50, mid_color='FFE66D',  # Yellow
-                    end_type='max', end_color='4ECDC4'  # Green
+                    end_type='max', end_color='4ECDC4'  # Green for low risk
                 )
                 worksheet.conditional_formatting.add(cell_range, rule)
                 
             elif rule_type == 'data_bars':
-                # Data bars
+                # Data bars for performance metrics
                 rule = DataBarRule(
                     start_type='min', end_type='max',
                     color='4472C4', showValue=True
@@ -296,19 +306,19 @@ class DataFrameComponent(ExcelComponent):
                 worksheet.conditional_formatting.add(cell_range, rule)
                 
             elif rule_type == 'positive_negative':
-                # Color positive values green, negative red
+                # Color positive values green, negative red for P&L
                 pos_rule = CellIsRule(operator='greaterThan', formula=['0'], 
-                                    fill=PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid'),
-                                    font=Font(color='006100'))
+                                      fill=PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid'),
+                                      font=Font(color='006100'))
                 neg_rule = CellIsRule(operator='lessThan', formula=['0'],
-                                    fill=PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid'),
-                                    font=Font(color='9C0006'))
+                                      fill=PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid'),
+                                      font=Font(color='9C0006'))
                 worksheet.conditional_formatting.add(cell_range, pos_rule)
                 worksheet.conditional_formatting.add(cell_range, neg_rule)
                 
-    def _autofit_columns(self, worksheet):
-        """Auto-fit column widths based on content."""
-        for col_idx, column in enumerate(self.df.columns):
+    def _autofit_columns(self, worksheet) -> None:
+        """Auto-fit column widths based on content for better readability."""
+        for col_idx, column in enumerate(self.df.columns, start=0):
             column_letter = get_column_letter(self.start_col + col_idx)
             
             # Calculate max width needed
@@ -316,28 +326,28 @@ class DataFrameComponent(ExcelComponent):
             for value in self.df.iloc[:, col_idx]:
                 max_length = max(max_length, len(str(value)))
                 
-            # Set column width (with some padding)
-            worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
+            # Set column width (with some padding, max 50 for quant data)
+            worksheet.column_dimensions[column_letter].width = min(max_length + 4, 50)
 
 
 class PlotlyChartComponent(ExcelComponent):
-    """Component for embedding plotly charts as images in Excel."""
+    """Component for embedding Plotly charts as images in Excel, suitable for quant visualizations."""
     
-    def __init__(self, figure: Optional[go.Figure] = None,
-                 plot_function: Optional[Callable] = None,
-                 plot_args: tuple = (),
-                 plot_kwargs: dict = None,
+    def __init__(self, figure: go.Figure | None = None,
+                 plot_function: Callable[..., go.Figure] | None = None,
+                 plot_args: tuple[Any, ...] = (),
+                 plot_kwargs: dict[str, Any] | None = None,
                  image_format: str = "png",
                  width: int = 800,
                  height: int = 500,
                  scale: float = 2.0,
-                 **kwargs):
+                 **kwargs) -> None:
         """
-        Initialize plotly chart component.
+        Initialize Plotly chart component.
         
         Args:
-            figure: plotly Figure object
-            plot_function: Function that returns a plotly figure
+            figure: Plotly Figure object
+            plot_function: Function that returns a Plotly figure
             plot_args: Arguments for plot_function
             plot_kwargs: Keyword arguments for plot_function
             image_format: Image format ('png', 'jpg')
@@ -357,10 +367,10 @@ class PlotlyChartComponent(ExcelComponent):
         self.scale = scale
         
         if not HAS_PLOTLY:
-            raise ImportError("plotly is required for PlotlyChartComponent")
+            raise ImportError("Plotly is required for PlotlyChartComponent")
             
-    def write_to_worksheet(self, worksheet, current_row: int = None) -> int:
-        """Write plotly chart as image to worksheet."""
+    def write_to_worksheet(self, worksheet, current_row: int | None = None) -> int:
+        """Write Plotly chart as image to worksheet."""
         start_row = current_row or self.start_row
         
         # Add title if provided
@@ -377,10 +387,10 @@ class PlotlyChartComponent(ExcelComponent):
             else:
                 # Create placeholder text
                 placeholder_cell = worksheet.cell(row=start_row, column=self.start_col, 
-                                                value="No chart data available")
+                                                  value="No chart data available")
                 return start_row + 2
                 
-        # Convert plotly figure to image bytes
+        # Convert Plotly figure to image bytes
         img_bytes = self.figure.to_image(
             format=self.image_format,
             width=self.width,
@@ -388,12 +398,12 @@ class PlotlyChartComponent(ExcelComponent):
             scale=self.scale
         )
         
-        # Create temporary file for image
-        temp_filename = f"temp_chart_{uuid.uuid4().hex[:8]}.{self.image_format}"
+        # Use tempfile for temporary image file
+        with tempfile.NamedTemporaryFile(suffix=f".{self.image_format}", delete=False) as temp_file:
+            temp_filename = temp_file.name
+            temp_file.write(img_bytes)
+        
         try:
-            with open(temp_filename, 'wb') as f:
-                f.write(img_bytes)
-                
             # Insert image into worksheet
             img = Image(temp_filename)
             
@@ -401,8 +411,8 @@ class PlotlyChartComponent(ExcelComponent):
             cell_address = worksheet.cell(row=start_row, column=self.start_col).coordinate
             img.anchor = cell_address
             
-            # Scale image to fit nicely in Excel
-            img.width = self.width * 0.75  # Scale down for Excel
+            # Scale image to fit nicely in Excel for quant reports
+            img.width = self.width * 0.75
             img.height = self.height * 0.75
             
             worksheet.add_image(img)
@@ -412,17 +422,17 @@ class PlotlyChartComponent(ExcelComponent):
             if os.path.exists(temp_filename):
                 os.remove(temp_filename)
                 
-        # Calculate rows occupied by image (rough estimate)
-        rows_occupied = max(int(self.height * 0.75 / 20), 15)  # ~20 pixels per row
+        # Calculate rows occupied by image (rough estimate, adjusted for quant charts)
+        rows_occupied = max(int(self.height * 0.75 / 18), 20)  # Adjusted for denser charts
         self.end_row = start_row + rows_occupied
         
-        return self.end_row + 2  # Return next available row
+        return self.end_row + 3  # Increased spacing for readability
 
 
 class ExcelReport:
-    """Main Excel report class that combines components across multiple worksheets."""
+    """Main Excel report class that combines components across multiple worksheets for quant analysis."""
     
-    def __init__(self, filename: str, title: str = None):
+    def __init__(self, filename: str, title: str | None = None) -> None:
         """
         Initialize Excel report.
         
@@ -430,21 +440,21 @@ class ExcelReport:
             filename: Output Excel filename
             title: Report title
         """
-        self.filename = filename
-        self.title = title or "Quantitative Report"
-        self.workbook = Workbook() if HAS_OPENPYXL else None
-        self.worksheets: Dict[str, Any] = {}
-        self.components: Dict[str, List[ExcelComponent]] = {}
-        
         if not HAS_OPENPYXL:
             raise ImportError("openpyxl is required for ExcelReport")
             
+        self.filename = filename
+        self.title = title or "Quantitative Report"
+        self.workbook = Workbook()
+        self.worksheets: dict[str, openpyxl.worksheet.worksheet.Worksheet] = {}
+        self.components: dict[str, list[ExcelComponent]] = {}
+        
         # Remove default worksheet and create summary
         self.workbook.remove(self.workbook.active)
         self._create_summary_worksheet()
         
-    def _create_summary_worksheet(self):
-        """Create summary/cover worksheet."""
+    def _create_summary_worksheet(self) -> None:
+        """Create summary/cover worksheet with quant-specific metadata."""
         summary_ws = self.workbook.create_sheet("Summary", 0)
         self.worksheets["Summary"] = summary_ws
         self.components["Summary"] = []
@@ -452,7 +462,7 @@ class ExcelReport:
         # Add report title and metadata
         title_component = TextComponent(
             text=self.title,
-            style=ExcelStyle(font_size=20, font_bold=True),
+            style=ExcelStyle(font_size=20, font_bold=True, alignment_horizontal="center"),
             start_row=2
         )
         
@@ -462,7 +472,9 @@ This report contains quantitative analysis including:
 • Performance metrics and P&L breakdown
 • Risk analysis and exposure metrics  
 • Market data and statistical summaries
-• Interactive charts and visualizations"""
+• Interactive charts and visualizations
+        
+Optimized for quantitative finance teams."""
         
         metadata_component = TextComponent(
             text=metadata_text,
@@ -470,9 +482,9 @@ This report contains quantitative analysis including:
             start_row=5
         )
         
-        self.components["Summary"] = [title_component, metadata_component]
+        self.components["Summary"].extend([title_component, metadata_component])
         
-    def create_worksheet(self, name: str) -> Any:
+    def create_worksheet(self, name: str) -> openpyxl.worksheet.worksheet.Worksheet:
         """Create a new worksheet."""
         if name in self.worksheets:
             return self.worksheets[name]
@@ -482,7 +494,7 @@ This report contains quantitative analysis including:
         self.components[name] = []
         return worksheet
         
-    def add_component(self, component: ExcelComponent, worksheet_name: str = "Summary"):
+    def add_component(self, component: ExcelComponent, worksheet_name: str = "Summary") -> None:
         """Add component to specific worksheet."""
         if worksheet_name not in self.worksheets:
             self.create_worksheet(worksheet_name)
@@ -491,18 +503,18 @@ This report contains quantitative analysis including:
         
     def add_text(self, text: str, worksheet_name: str = "Summary", **kwargs) -> TextComponent:
         """Add text component to worksheet."""
-        component = TextComponent(text, **kwargs)
+        component = TextComponent(text=text, **kwargs)
         self.add_component(component, worksheet_name)
         return component
         
     def add_dataframe(self, df: pd.DataFrame, worksheet_name: str = "Data", **kwargs) -> DataFrameComponent:
         """Add DataFrame component to worksheet."""
-        component = DataFrameComponent(df, **kwargs)
+        component = DataFrameComponent(df=df, **kwargs)
         self.add_component(component, worksheet_name)
         return component
         
-    def add_plotly_chart(self, figure: go.Figure = None, worksheet_name: str = "Charts", **kwargs) -> PlotlyChartComponent:
-        """Add plotly chart component to worksheet."""
+    def add_plotly_chart(self, figure: go.Figure | None = None, worksheet_name: str = "Charts", **kwargs) -> PlotlyChartComponent:
+        """Add Plotly chart component to worksheet."""
         component = PlotlyChartComponent(figure=figure, **kwargs)
         self.add_component(component, worksheet_name)
         return component
@@ -527,8 +539,8 @@ This report contains quantitative analysis including:
 
 
 # Helper functions for common quant formatting
-def get_financial_number_formats():
-    """Get common financial number formats."""
+def get_financial_number_formats() -> dict[str, str]:
+    """Get common financial number formats tailored for quant reports."""
     return {
         'currency': '"$"#,##0.00',
         'currency_millions': '"$"#,##0,,"M"',
@@ -538,24 +550,27 @@ def get_financial_number_formats():
         'large_number': '#,##0',
         'return_pct': '0.00"%"',
         'pnl': '"$"#,##0.00_);[Red]("$"#,##0.00)',
+        'volatility': '0.00%',
+        'sharpe': '0.00'
     }
 
 
-def create_pnl_conditional_formatting():
+def create_pnl_conditional_formatting() -> dict[str, str]:
     """Get P&L specific conditional formatting rules."""
     return {
         'type': 'positive_negative'
     }
 
 
-def create_sample_quant_excel_report():
+def create_sample_quant_excel_report() -> ExcelReport:
     """Create a comprehensive sample Excel report for quant teams."""
     
     # Create report
     report = ExcelReport("daily_quant_report.xlsx", "Daily Quantitative Analysis Report")
     
     # Add summary text
-    report.add_text("""
+    report.add_text(
+        """
 Daily Performance Summary:
 • Portfolio returned +1.87% today
 • Outperformed benchmark by +0.92%
@@ -586,7 +601,7 @@ Daily Performance Summary:
         'MTD_PnL_MM': financial_formats['currency_millions'], 
         'YTD_PnL_MM': financial_formats['currency_millions'],
         'Daily_Return_Pct': financial_formats['percentage'],
-        'Sharpe_Ratio': financial_formats['ratio'],
+        'Sharpe_Ratio': financial_formats['sharpe'],
         'Max_DD_Pct': financial_formats['percentage'],
         'AUM_MM': financial_formats['currency_millions']
     }
@@ -635,7 +650,7 @@ Daily Performance Summary:
         conditional_formatting=risk_conditional
     )
     
-    # Add plotly charts if available
+    # Add Plotly charts if available
     if HAS_PLOTLY:
         # Cumulative returns chart
         dates = pd.date_range('2024-01-01', '2024-08-09', freq='D')
@@ -647,18 +662,19 @@ Daily Performance Summary:
         
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=dates, y=(portfolio_cum-1)*100, name='Portfolio', 
-                                line=dict(color='blue', width=2)))
+                                 line=dict(color='blue', width=2)))
         fig.add_trace(go.Scatter(x=dates, y=(benchmark_cum-1)*100, name='Benchmark', 
-                                line=dict(color='gray', width=1, dash='dash')))
+                                 line=dict(color='gray', width=1, dash='dash')))
         
         fig.update_layout(
             title="Cumulative Returns Comparison",
             xaxis_title="Date",
             yaxis_title="Cumulative Return (%)",
-            template="plotly_white"
+            template="plotly_white",
+            height=400
         )
         
-        report.add_plotly_chart(fig, worksheet_name="Charts", title="Performance Chart")
+        report.add_plotly_chart(fig, worksheet_name="Charts", title="Performance Chart", height=400)
         
         # Risk decomposition pie chart
         risk_contrib = pd.DataFrame({
@@ -667,10 +683,11 @@ Daily Performance Summary:
         })
         
         fig2 = px.pie(risk_contrib, values='Risk_Contribution', names='Strategy', 
-                     title='Risk Contribution by Strategy')
+                      title='Risk Contribution by Strategy')
         fig2.update_traces(textposition='inside', textinfo='percent+label')
+        fig2.update_layout(height=400)
         
-        report.add_plotly_chart(fig2, worksheet_name="Charts", title="Risk Decomposition")
+        report.add_plotly_chart(fig2, worksheet_name="Charts", title="Risk Decomposition", height=400)
     
     return report
 
